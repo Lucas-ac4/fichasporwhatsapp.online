@@ -1,0 +1,635 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ajedrez Medio Juego</title>
+<meta name="description" content="15 posiciones de medio juego para jugar con blancas o negras contra una IA de ~1800 Elo, con botón de mejor jugada y reinicio.">
+<style>
+:root{
+  --bg:#f3efe6; --panel:#fffdf8; --ink:#1e1c19; --muted:#6c655b; --line:#e3dccd;
+  --accent:#2f6f4e; --accent-ink:#fff; --accent-soft:#e3efe7;
+  --sq-light:#efe6cf; --sq-dark:#8a6a4b; --sel:rgba(255,204,0,.55); --last:rgba(255,224,90,.45);
+  --check:rgba(214,48,32,.65); --dot:rgba(20,20,20,.28); --arrow:#e26a12;
+  --hint-bg:#fff4e6; --hint-line:#f2c28f; --warn:#b3412f;
+  --wp:#fbfaf6; --bp:#141210;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#151412; --panel:#201e1b; --ink:#ece7dc; --muted:#a39b8e; --line:#36322c;
+    --accent:#4ea476; --accent-ink:#0d1a12; --accent-soft:#1f3328;
+    --sq-light:#d9ccab; --sq-dark:#7a5c40; --hint-bg:#2d2419; --hint-line:#6e4b25; --warn:#e2765f;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#151412; --panel:#201e1b; --ink:#ece7dc; --muted:#a39b8e; --line:#36322c;
+  --accent:#4ea476; --accent-ink:#0d1a12; --accent-soft:#1f3328;
+  --sq-light:#d9ccab; --sq-dark:#7a5c40; --hint-bg:#2d2419; --hint-line:#6e4b25; --warn:#e2765f;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
+header{max-width:1080px;margin:0 auto;padding:18px 16px 6px}
+h1{font:700 1.45rem/1.2 Georgia,"Times New Roman",serif;margin:0}
+header p{margin:4px 0 0;color:var(--muted)}
+.wrap{max-width:1080px;margin:0 auto;padding:10px 16px 40px;display:grid;grid-template-columns:minmax(0,560px) minmax(0,1fr);gap:22px;align-items:start}
+@media (max-width:860px){.wrap{grid-template-columns:minmax(0,1fr)}}
+
+/* Tablero */
+.board-col{display:flex;flex-direction:column;gap:10px;min-width:0}
+.board-box{position:relative;width:100%;container-type:inline-size;border-radius:6px;overflow:hidden;box-shadow:0 6px 22px rgba(0,0,0,.18)}
+.board{display:grid;grid-template-columns:repeat(8,1fr);aspect-ratio:1/1;width:100%;touch-action:none;user-select:none;-webkit-user-select:none}
+.sq{position:relative;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.sq.l{background:var(--sq-light)} .sq.d{background:var(--sq-dark)}
+.sq.last::before,.sq.sel::before,.sq.chk::before{content:"";position:absolute;inset:0}
+.sq.last::before{background:var(--last)}
+.sq.sel::before{background:var(--sel)}
+.sq.chk::before{background:radial-gradient(circle,var(--check) 0,var(--check) 40%,transparent 75%)}
+.sq.tgt::after{content:"";position:absolute;width:30%;height:30%;border-radius:50%;background:var(--dot);pointer-events:none}
+.sq.tgt.cap::after{width:88%;height:88%;background:transparent;border:.9cqw solid var(--dot);box-sizing:border-box}
+.pc{position:relative;font-size:10.2cqw;line-height:1;font-family:"Segoe UI Symbol","Noto Sans Symbols 2","DejaVu Sans","Apple Symbols",serif;pointer-events:none}
+.pc.w{color:var(--wp);text-shadow:0 0 1px #000,0 0 1px #000,1px 1px 0 #000,-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,0 2px 3px rgba(0,0,0,.35)}
+.pc.b{color:var(--bp);text-shadow:0 0 1px rgba(255,255,255,.25),0 2px 3px rgba(0,0,0,.3)}
+.pc.lift{opacity:.25}
+.coord{position:absolute;font-size:2.1cqw;font-weight:700;pointer-events:none;opacity:.85}
+.coord.r{top:2%;left:4%} .coord.f{bottom:1%;right:5%}
+.sq.l .coord{color:var(--sq-dark)} .sq.d .coord{color:var(--sq-light)}
+svg.arrows{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.ghost{position:fixed;z-index:50;pointer-events:none;transform:translate(-50%,-50%)}
+.overlay{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.45);color:#fff;text-align:center;padding:20px}
+.overlay.show{display:flex}
+.overlay div{background:rgba(20,18,16,.92);border-radius:10px;padding:16px 20px;font-weight:600;font-size:1.05rem;max-width:80%}
+
+/* Barra de evaluación */
+.evalrow{display:flex;align-items:center;gap:10px}
+.evalbar{flex:1;height:12px;border-radius:999px;background:#2a2723;overflow:hidden;border:1px solid var(--line)}
+.evalbar span{display:block;height:100%;width:50%;background:#f5f3ee;transition:width .4s}
+.evalnum{font:600 .9rem ui-monospace,Menlo,Consolas,monospace;min-width:60px;text-align:right}
+.evalrow.hidden .evalbar,.evalrow.hidden .evalnum{visibility:hidden}
+.linkbtn{background:none;border:0;color:var(--muted);font:inherit;font-size:.85rem;cursor:pointer;padding:4px;text-decoration:underline}
+
+/* Botones */
+.controls{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:8px}
+button.btn{font:600 .95rem system-ui,sans-serif;border-radius:10px;padding:12px 10px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer;min-height:46px}
+button.btn:hover:not(:disabled){border-color:var(--accent)}
+button.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button.btn:disabled{opacity:.45;cursor:not-allowed}
+
+/* Panel */
+.panel{display:flex;flex-direction:column;gap:14px;min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.titlebar{display:flex;align-items:center;gap:8px}
+.titlebar h2{flex:1;margin:0;font:700 1.12rem/1.25 Georgia,serif}
+.navbtn{width:36px;height:36px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--ink);font-size:1.1rem;cursor:pointer}
+.badges{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.badge{font-size:.78rem;font-weight:600;padding:3px 9px;border-radius:999px;background:var(--accent-soft);color:var(--ink);border:1px solid var(--line)}
+.badge.side::before{content:"";display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:-1px;border:1px solid #555}
+.badge.side.w::before{background:#fff} .badge.side.b::before{background:#111}
+.plan{margin:6px 0 0;color:var(--ink)}
+details{margin-top:8px;color:var(--muted);font-size:.86rem}
+details summary{cursor:pointer}
+.status{font-weight:600;margin:0}
+.status.think{color:var(--muted)}
+.hint{display:none;margin-top:10px;background:var(--hint-bg);border:1px solid var(--hint-line);border-radius:10px;padding:10px 12px}
+.hint.show{display:block}
+.hint .big{font:700 1.15rem Georgia,serif}
+.hint .pv{font:.86rem ui-monospace,Menlo,Consolas,monospace;color:var(--muted);margin-top:4px;word-break:break-word}
+.hint button{margin-top:8px;min-height:38px;padding:8px 12px}
+.moves{font:.9rem ui-monospace,Menlo,Consolas,monospace;margin-top:8px;color:var(--muted);max-height:120px;overflow:auto;word-break:break-word}
+.picker h3{margin:0 0 10px;font-size:.95rem}
+.list{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.item{display:flex;gap:8px;align-items:flex-start;text-align:left;font:inherit;color:var(--ink);background:transparent;border:1px solid var(--line);border-radius:10px;padding:8px 10px;cursor:pointer}
+.item:hover{border-color:var(--accent)}
+.item.on{border-color:var(--accent);background:var(--accent-soft)}
+.item .n{font-weight:700;min-width:20px}
+.item .t{font-size:.86rem;line-height:1.25}
+.item .k{display:block;font-size:.74rem;color:var(--muted);margin-top:2px}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;border:1px solid #555;margin-right:4px;vertical-align:-1px}
+.dot.w{background:#fff}.dot.b{background:#111}
+.foot{color:var(--muted);font-size:.8rem}
+.err{color:var(--warn);font-weight:600}
+</style>
+</head>
+<body>
+<header>
+  <h1>Ajedrez · Medio juego vs IA (~1800)</h1>
+  <p>15 posiciones de medio juego salidas de aperturas reales: la mayoría parejas, algunas con ventaja para un bando. Jugás con el bando que tiene el turno; la IA responde con fuerza de club (~1800 Elo).</p>
+</header>
+
+<main class="wrap">
+  <section class="board-col">
+    <div class="board-box" id="boardBox">
+      <div class="board" id="board"></div>
+      <svg class="arrows" id="arrows" viewBox="0 0 8 8" aria-hidden="true">
+        <defs><marker id="ah" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="2.6" markerHeight="2.6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--arrow)"/></marker></defs>
+        <g id="arrowLayer"></g>
+      </svg>
+      <div class="overlay" id="overlay"><div id="overlayText"></div></div>
+    </div>
+    <div class="evalrow" id="evalRow">
+      <div class="evalbar" title="Evaluación (blancas arriba = barra clara)"><span id="evalFill"></span></div>
+      <div class="evalnum" id="evalNum">…</div>
+      <button class="linkbtn" id="toggleEval">Ocultar eval.</button>
+    </div>
+    <div class="controls">
+      <button class="btn primary" id="btnBest">💡 Mejor jugada</button>
+      <button class="btn" id="btnUndo">↶ Deshacer</button>
+      <button class="btn" id="btnReset">↺ Reiniciar</button>
+    </div>
+  </section>
+
+  <aside class="panel">
+    <div class="card">
+      <div class="titlebar">
+        <button class="navbtn" id="prev" aria-label="Anterior">‹</button>
+        <h2 id="title">Cargando…</h2>
+        <button class="navbtn" id="next" aria-label="Siguiente">›</button>
+      </div>
+      <div class="badges"><span class="badge side" id="sideBadge"></span><span class="badge" id="typeBadge"></span><span class="badge" id="startEval">Eval inicial: …</span></div>
+      <p class="plan" id="plan"></p>
+      <details><summary>Cómo se llegó a esta posición</summary><div id="origin"></div></details>
+    </div>
+
+    <div class="card">
+      <p class="status" id="status">Cargando motor…</p>
+      <div class="hint" id="hint">
+        <div class="big" id="hintMove"></div>
+        <div id="hintEval"></div>
+        <div class="pv" id="hintPv"></div>
+        <button class="btn" id="btnPlayHint">▶ Jugar esta jugada</button>
+      </div>
+      <div class="moves" id="moves"></div>
+    </div>
+
+    <div class="card picker">
+      <h3>Elegí una posición</h3>
+      <div class="list" id="list"></div>
+    </div>
+    <p class="foot">Motor: Stockfish 10 (GPL) · Reglas: chess.js. La “mejor jugada” usa el motor a máxima fuerza; la IA rival juega limitada para rondar los 1800.</p>
+  </aside>
+</main>
+
+<script src="lib/chess.js"></script>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+/* ===== 15 posiciones de medio juego (se generan jugando la apertura real) ===== */
+const POSITIONS = [
+  {name:"Italiana · Giuoco Pianissimo", tipo:"Leve ventaja blancas",
+   moves:"e4 e5 Nf3 Nc6 Bc4 Bc5 c3 Nf6 d3 d6 O-O O-O Re1 a6 a4 Ba7 h3 h6 Nbd2 Re8",
+   plan:"Partida de maniobras. Buscá Nf1–g3 para reforzar el flanco rey y prepará el golpe central d4 en el momento justo. Evitá cambios que liberen al alfil de a7."},
+  {name:"Ruy López · Chigorin", tipo:"Pareja",
+   moves:"e4 e5 Nf3 Nc6 Bb5 a6 Ba4 Nf6 O-O Be7 Re1 b5 Bb3 d6 c3 O-O h3 Na5 Bc2 c5 d4 Qc7 Nbd2",
+   plan:"Tensión clásica en el centro. Decidí entre ...cxd4 para abrir la columna c (donde está tu dama) o ...Nc6 para mantener la presión sobre d4."},
+  {name:"Siciliana Najdorf · Ataque Inglés", tipo:"Afilada",
+   moves:"e4 c5 Nf3 d6 d4 cxd4 Nxd4 Nf6 Nc3 a6 Be3 e5 Nb3 Be6 f3 Be7 Qd2 O-O O-O-O Nbd7 g4 b5",
+   plan:"Enroques opuestos: es una carrera. Empujá g5 para echar el caballo de f6 y atacá el rey negro antes de que llegue ...b4."},
+  {name:"Gambito de Dama · Ortodoxa", tipo:"Pareja",
+   moves:"d4 d5 c4 e6 Nc3 Nf6 Bg5 Be7 e3 O-O Nf3 Nbd7 Rc1 c6 Bd3 dxc4 Bxc4 Nd5 Bxe7 Qxe7 O-O",
+   plan:"Posición sólida pero apretada. Liberate con cambios (...Nxc3) y preparé ...e5 o ...c5 para darle vida al alfil de c8."},
+  {name:"India de Rey · Mar del Plata", tipo:"Desequilibrada · leve ventaja blancas",
+   moves:"d4 Nf6 c4 g6 Nc3 Bg7 e4 d6 Nf3 O-O Be2 e5 O-O Nc6 d5 Ne7 Ne1 Nd7 Nd3 f5 Bd2 Nf6 f3 f4",
+   plan:"Las negras van a atacar tu rey con ...g5–g4. Vos tenés que ser más rápido en el flanco dama: c5, Nb5/Rc1 y abrir la columna c."},
+  {name:"Francesa · Winawer", tipo:"Desequilibrada",
+   moves:"e4 e6 d4 d5 Nc3 Bb4 e5 c5 a3 Bxc3+ bxc3 Ne7 Qg4 O-O Bd3 Nbc6 Qh5 Ng6 Nf3 Qc7 Be3",
+   plan:"Las blancas tienen pareja de alfiles y ataque; vos, mejor estructura. Cerrá el flanco dama con ...c4 y después golpeá el centro con ...f6. Ojo con Bxg6."},
+  {name:"Caro-Kann · Clásica", tipo:"Leve ventaja blancas",
+   moves:"e4 c6 d4 d5 Nc3 dxe4 Nxe4 Bf5 Ng3 Bg6 h4 h6 Nf3 Nd7 h5 Bh7 Bd3 Bxd3 Qxd3 e6 Bd2 Ngf6 O-O-O Be7 Kb1 O-O",
+   plan:"Tenés más espacio gracias al peón de h5. Centralizá con Ne4, ganá terreno con c4 y apuntá al enroque negro con Qe2/g4."},
+  {name:"Sistema Londres", tipo:"Pareja",
+   moves:"d4 d5 Bf4 Nf6 e3 c5 c3 Nc6 Nd2 e6 Ngf3 Bd6 Bg3 O-O Bd3 b6 Ne5 Bb7 f4",
+   plan:"Las blancas montan el ataque típico (f4, Rf3–h3). Desafiá el caballo de e5, buscá ...Ne7–f5 y contraatacá en el centro con ...c4 o ...Ne4."},
+  {name:"Eslava · Variante principal", tipo:"Leve ventaja blancas",
+   moves:"d4 d5 c4 c6 Nf3 Nf6 Nc3 dxc4 a4 Bf5 e3 e6 Bxc4 Bb4 O-O Nbd7 Qe2 Bg6 e4 O-O",
+   plan:"Ya tenés el centro e4–d4. Empujá e5 para echar el caballo de f6 o desarrollá con Bd3 y Rd1 manteniendo el espacio."},
+  {name:"Gambito Benko", tipo:"Peón menos con compensación",
+   moves:"d4 Nf6 c4 c5 d5 b5 cxb5 a6 bxa6 g6 Nc3 Bxa6 e4 Bxf1 Kxf1 d6 Nf3 Bg7 g3 O-O Kg2 Nbd7 Re1",
+   plan:"Diste un peón por presión duradera en las columnas a y b. Activá la dama (...Qa5), doblá torres en a8/b8 y atacá los peones a2 y b2."},
+  {name:"Siciliana Dragón · Yugoslavo", tipo:"Muy afilada · ventaja blancas",
+   moves:"e4 c5 Nf3 d6 d4 cxd4 Nxd4 Nf6 Nc3 g6 Be3 Bg7 f3 O-O Qd2 Nc6 Bc4 Bd7 O-O-O Rc8 Bb3 Ne5 Kb1 Nc4 Bxc4 Rxc4",
+   plan:"Receta clásica: g4, h4–h5, abrir la columna h y cambiar el alfil de g7 con Bh6. ¡Cuidado con el sacrificio ...Rxc3!"},
+  {name:"Gambito Evans", tipo:"Ventaja grande blancas (con peón menos)",
+   moves:"e4 e5 Nf3 Nc6 Bc4 Bc5 b4 Bxb4 c3 Ba5 d4 exd4 O-O Nge7 cxd4 d5 exd5 Nxd5 Ba3 Be6 Bb5 Qd7",
+   plan:"Tenés un peón menos, pero el rey negro está atrapado en el centro (no puede enrocar corto por el alfil de a3) y el motor te da clara ventaja. Golpeá rápido con Ne5, Re1 y Qa4 antes de que las negras enroquen largo."},
+  {name:"Grünfeld · Cambio", tipo:"Desequilibrada",
+   moves:"d4 Nf6 c4 g6 Nc3 d5 cxd5 Nxd5 e4 Nxc3 bxc3 Bg7 Bc4 c5 Ne2 Nc6 Be3 O-O O-O Bg4 f3 Na5 Bd3",
+   plan:"Las blancas tienen el centro; vos, presión sobre d4. Cambiá en d4 (...cxd4), seguí con ...Be6 y ...Rc8 para atacar las casillas débiles."},
+  {name:"Inglesa · Cuatro Caballos", tipo:"Pareja",
+   moves:"c4 e5 Nc3 Nf6 Nf3 Nc6 g3 Bb4 Bg2 O-O O-O e4 Ng5 Bxc3 bxc3 Re8 f3 exf3 Nxf3 d5 cxd5 Qxd5",
+   plan:"Tenés peones doblados pero centro móvil y la pareja de alfiles. Echá a la dama con c4 o d4, ocupá el centro con e4 y activá el alfil de c1."},
+  {name:"Catalana · Abierta", tipo:"Pareja",
+   moves:"d4 Nf6 c4 e6 g3 d5 Bg2 Be7 Nf3 O-O O-O dxc4 Qc2 a6 a4 Bd7 Qxc4 Bc6 Bf4",
+   plan:"El alfil de g2 presiona la gran diagonal. Neutralizalo (...Bd5 o ...Nd5), frená a4–a5 con ...a5 y completá el desarrollo con ...Nbd7."}
+];
+
+/* ===== Motor (Web Worker con Stockfish) ===== */
+class Engine{
+  constructor(path, opts){
+    this.w = new Worker(path);
+    this.job = null; this.chain = Promise.resolve();
+    this.ready = new Promise(r => this._ready = r);
+    this.w.onmessage = e => this.onLine(String(e.data));
+    this.w.onerror = () => engineFailed();
+    this.send("uci");
+    for (const [k,v] of Object.entries(opts)) this.send(`setoption name ${k} value ${v}`);
+    this.send("isready");
+  }
+  send(c){ this.w.postMessage(c); }
+  onLine(line){
+    if (line === "readyok" && this._ready){ this._ready(); this._ready = null; return; }
+    const j = this.job; if (!j) return;
+    if (line.startsWith("info") && line.includes(" pv ")){
+      const mp = line.match(/ multipv (\d+)/); if (mp && mp[1] !== "1") return;
+      const sc = line.match(/ score (cp|mate) (-?\d+)/);
+      if (sc) j.score = {type:sc[1], value:+sc[2]};
+      j.pv = line.split(" pv ")[1].trim().split(/\s+/);
+      j.depth = +((line.match(/ depth (\d+)/)||[])[1]||0);
+      if (!j.cancelled && j.onInfo) j.onInfo(j);
+    } else if (line.startsWith("bestmove")){
+      j.best = line.split(/\s+/)[1];
+      this.job = null;
+      j.resolve(j.cancelled ? null : j);
+    }
+  }
+  search(fen, go, onInfo){
+    const job = {fen, go, onInfo, cancelled:false};
+    const p = new Promise(r => job.resolve = r);
+    this.chain = this.chain.then(async () => {
+      await this.ready;
+      if (job.cancelled){ job.resolve(null); return; }
+      this.job = job;
+      this.send("position fen " + fen);
+      this.send(go);
+      await p;
+    });
+    return {promise:p, cancel:() => {
+      if (job.cancelled) return;
+      job.cancelled = true;
+      if (this.job === job) this.send("stop");
+    }};
+  }
+}
+
+let ai, coach;
+// IA rival: Skill Level limitado + poca profundidad ≈ jugador de club ~1800
+const AI_GO = "go depth 9 movetime 900";
+const HINT_GO = "go depth 18 movetime 3500";
+const EVAL_GO = "go depth 13 movetime 1200";
+try{
+  ai = new Engine("lib/stockfish.js", {"Hash":16, "Skill Level":8});
+  coach = new Engine("lib/stockfish.js", {"Hash":32, "Skill Level":20});
+}catch(e){ engineFailed(); }
+
+function engineFailed(){
+  $("status").innerHTML = '<span class="err">No se pudo iniciar el motor de ajedrez. Abrí la página desde un servidor web (no como archivo local).</span>';
+}
+
+/* ===== Estado ===== */
+const GLYPH = {k:"♚",q:"♛",r:"♜",b:"♝",n:"♞",p:"♟"};
+const FILES = "abcdefgh";
+let idx = 0, game, userColor, startFen, prefixSan = [], prefixLast = null;
+let selected = null, targets = [], hintMove = null, thinking = false, gen = 0;
+let aiTask = null, coachTask = null, showEval = true;
+
+// Precalcular las posiciones
+const BUILT = POSITIONS.map((p, i) => {
+  const g = new Chess();
+  const sans = p.moves.trim().split(/\s+/);
+  let last = null;
+  for (const s of sans){
+    const m = g.move(s);
+    if (!m){ console.error("Movimiento ilegal en posición", i+1, s); return {...p, error:true}; }
+    last = m;
+  }
+  return {...p, fen:g.fen(), last, history:g.history(), side:g.turn()};
+});
+
+/* ===== Tablero ===== */
+const boardEl = $("board");
+const squares = {};
+function buildBoard(){
+  boardEl.innerHTML = "";
+  for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++){
+    const f = userColor === "w" ? c : 7 - c;
+    const rank = userColor === "w" ? 8 - r : r + 1;
+    const sq = FILES[f] + rank;
+    const el = document.createElement("div");
+    el.className = "sq " + ((f + rank) % 2 === 0 ? "d" : "l");
+    el.dataset.sq = sq; el.dataset.r = r; el.dataset.c = c;
+    let coords = "";
+    if (c === 0) coords += `<span class="coord r">${rank}</span>`;
+    if (r === 7) coords += `<span class="coord f">${FILES[f]}</span>`;
+    el.innerHTML = coords + '<span class="pc"></span>';
+    boardEl.appendChild(el);
+    squares[sq] = el;
+  }
+}
+function sqXY(sq){ const el = squares[sq]; return [+el.dataset.c + .5, +el.dataset.r + .5]; }
+
+function render(){
+  const lastMv = currentLast();
+  const inCheck = game.in_check();
+  for (const sq in squares){
+    const el = squares[sq], p = game.get(sq), pc = el.querySelector(".pc");
+    pc.textContent = p ? GLYPH[p.type] + "︎" : "";
+    pc.className = "pc" + (p ? " " + p.color : "") + (dragFrom === sq && dragging ? " lift" : "");
+    el.classList.toggle("sel", selected === sq);
+    el.classList.toggle("last", !!lastMv && (lastMv.from === sq || lastMv.to === sq));
+    const t = targets.find(m => m.to === sq);
+    el.classList.toggle("tgt", !!t);
+    el.classList.toggle("cap", !!t && !!game.get(sq));
+    el.classList.toggle("chk", inCheck && p && p.type === "k" && p.color === game.turn());
+  }
+  drawArrow();
+  renderMoves();
+  renderStatus();
+  const userTurn = game.turn() === userColor && !game.game_over() && !thinking;
+  $("btnBest").disabled = !userTurn;
+  $("btnUndo").disabled = game.history().length === 0;
+}
+
+function currentLast(){
+  const h = game.history({verbose:true});
+  return h.length ? h[h.length - 1] : prefixLast;
+}
+
+function drawArrow(){
+  const layer = $("arrowLayer"); layer.innerHTML = "";
+  if (!hintMove) return;
+  const [x1,y1] = sqXY(hintMove.slice(0,2)), [x2,y2] = sqXY(hintMove.slice(2,4));
+  const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy);
+  const ex = x2 - dx / len * .32, ey = y2 - dy / len * .32;
+  layer.innerHTML = `<line x1="${x1}" y1="${y1}" x2="${ex}" y2="${ey}" stroke="var(--arrow)" stroke-width=".17" stroke-linecap="round" opacity=".88" marker-end="url(#ah)"/>`;
+}
+
+function renderMoves(){
+  const h = game.history();
+  if (!h.length){ $("moves").textContent = ""; return; }
+  let num = +startFen.split(" ")[5], white = startFen.split(" ")[1] === "w", out = [];
+  if (!white) out.push(num + "…");
+  for (const s of h){
+    if (white) out.push(num + ".");
+    out.push(s);
+    if (!white) num++;
+    white = !white;
+  }
+  $("moves").textContent = "Jugadas: " + out.join(" ").replace(/\. /g, ".");
+}
+
+function renderStatus(){
+  const st = $("status"), ov = $("overlay");
+  st.classList.remove("think");
+  let over = "";
+  if (game.in_checkmate()) over = game.turn() === userColor ? "Jaque mate. Ganó la IA." : "¡Jaque mate! Ganaste 🎉";
+  else if (game.in_stalemate()) over = "Tablas por ahogado.";
+  else if (game.in_threefold_repetition()) over = "Tablas por triple repetición.";
+  else if (game.insufficient_material()) over = "Tablas por material insuficiente.";
+  else if (game.in_draw()) over = "Tablas (regla de 50 jugadas).";
+  if (over){
+    st.textContent = over; $("overlayText").textContent = over + " Tocá Reiniciar para volver a intentarlo."; ov.classList.add("show");
+    return;
+  }
+  ov.classList.remove("show");
+  if (thinking){ st.textContent = "La IA está pensando…"; st.classList.add("think"); }
+  else st.textContent = "Tu turno" + (game.in_check() ? " — ¡estás en jaque!" : ".") + " Tocá una pieza y después la casilla de destino.";
+}
+
+/* ===== Evaluación ===== */
+function fmtScore(score, turn){
+  if (!score) return {txt:"…", cp:0};
+  const sign = turn === "w" ? 1 : -1;
+  if (score.type === "mate"){
+    const m = score.value * sign;
+    return {txt:(m > 0 ? "+" : "−") + "M" + Math.abs(m), cp:m > 0 ? 3000 : -3000};
+  }
+  const cp = score.value * sign;
+  return {txt:(cp >= 0 ? "+" : "−") + (Math.abs(cp)/100).toFixed(2), cp};
+}
+function describe(cp){
+  const a = Math.abs(cp), who = cp > 0 ? "blancas" : "negras";
+  if (a < 50) return "pareja";
+  if (a < 120) return "leve ventaja " + who;
+  if (a < 250) return "clara ventaja " + who;
+  return "ventaja decisiva " + who;
+}
+function setEvalBar(s){
+  const pct = 50 + 50 * (2 / (1 + Math.exp(-0.004 * s.cp)) - 1);
+  $("evalFill").style.width = pct.toFixed(1) + "%";
+  $("evalNum").textContent = s.txt;
+}
+function updateEval(isStart){
+  if (!coach || game.game_over()) return;
+  if (coachTask) coachTask.cancel();
+  const myGen = gen, fen = game.fen(), turn = game.turn();
+  coachTask = coach.search(fen, EVAL_GO, j => { if (myGen === gen) setEvalBar(fmtScore(j.score, turn)); });
+  coachTask.promise.then(j => {
+    if (!j || myGen !== gen) return;
+    const s = fmtScore(j.score, turn);
+    setEvalBar(s);
+    if (isStart) $("startEval").textContent = `Eval inicial: ${s.txt} (${describe(s.cp)})`;
+  });
+}
+
+/* ===== Interacción ===== */
+let dragFrom = null, dragging = false, ghost = null, downXY = null;
+
+function userCanMove(){ return !thinking && !game.game_over() && game.turn() === userColor; }
+
+function selectSq(sq){
+  selected = sq;
+  targets = game.moves({square:sq, verbose:true});
+}
+function clearSel(){ selected = null; targets = []; }
+
+function tryMove(from, to){
+  const m = game.moves({square:from, verbose:true}).find(x => x.to === to);
+  if (!m) return false;
+  game.move({from, to, promotion:"q"});
+  clearSel(); hintMove = null; $("hint").classList.remove("show");
+  render();
+  if (!game.game_over()) aiMove(); else updateEval();
+  return true;
+}
+
+boardEl.addEventListener("pointerdown", e => {
+  const el = e.target.closest(".sq"); if (!el || !userCanMove()) return;
+  const sq = el.dataset.sq, p = game.get(sq);
+  if (selected && selected !== sq && tryMove(selected, sq)) return;
+  if (p && p.color === userColor){
+    selectSq(sq); dragFrom = sq; downXY = [e.clientX, e.clientY]; dragging = false;
+    boardEl.setPointerCapture(e.pointerId);
+  } else clearSel();
+  render();
+});
+boardEl.addEventListener("pointermove", e => {
+  if (!dragFrom) return;
+  if (!dragging && Math.hypot(e.clientX - downXY[0], e.clientY - downXY[1]) > 6){
+    dragging = true;
+    ghost = document.createElement("span");
+    const p = game.get(dragFrom);
+    ghost.className = "pc ghost " + p.color;
+    ghost.textContent = GLYPH[p.type] + "︎";
+    ghost.style.fontSize = (boardEl.clientWidth * 0.102) + "px";
+    document.body.appendChild(ghost);
+    render();
+  }
+  if (ghost){ ghost.style.left = e.clientX + "px"; ghost.style.top = e.clientY + "px"; }
+});
+function endDrag(e){
+  if (!dragFrom) return;
+  const from = dragFrom, wasDrag = dragging;
+  dragFrom = null; dragging = false;
+  if (ghost){ ghost.remove(); ghost = null; }
+  if (wasDrag && e){
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const t = el && el.closest && el.closest(".sq");
+    if (t && t.dataset.sq !== from && tryMove(from, t.dataset.sq)) return;
+  }
+  render();
+}
+boardEl.addEventListener("pointerup", endDrag);
+boardEl.addEventListener("pointercancel", () => endDrag(null));
+
+async function aiMove(){
+  if (!ai) return;
+  thinking = true; render();
+  const myGen = gen, t0 = Date.now();
+  aiTask = ai.search(game.fen(), AI_GO);
+  const j = await aiTask.promise;
+  if (!j || myGen !== gen) return;
+  const wait = 450 - (Date.now() - t0);
+  if (wait > 0) await new Promise(r => setTimeout(r, wait));
+  if (myGen !== gen) return;
+  const u = j.best;
+  if (u && u !== "(none)") game.move({from:u.slice(0,2), to:u.slice(2,4), promotion:u[4] || "q"});
+  thinking = false; aiTask = null;
+  render(); updateEval();
+}
+
+function uciToSanLine(fen, pv, max){
+  const g = new Chess(fen), out = [];
+  for (const u of pv.slice(0, max)){
+    const m = g.move({from:u.slice(0,2), to:u.slice(2,4), promotion:u[4] || "q"});
+    if (!m) break;
+    out.push(m);
+  }
+  return out;
+}
+function formatLine(fen, moves){
+  let num = +fen.split(" ")[5], white = fen.split(" ")[1] === "w", s = white ? "" : num + "… ";
+  for (const m of moves){
+    if (white) s += num + ".";
+    s += m.san + " ";
+    if (!white) num++;
+    white = !white;
+  }
+  return s.trim();
+}
+
+function showBest(){
+  if (!coach || !userCanMove()) return;
+  if (coachTask) coachTask.cancel();
+  const myGen = gen, fen = game.fen(), turn = game.turn();
+  const box = $("hint");
+  box.classList.add("show");
+  $("hintMove").textContent = "Analizando…";
+  $("hintEval").textContent = ""; $("hintPv").textContent = "";
+  $("btnPlayHint").style.display = "none";
+  const paint = (j, final) => {
+    if (myGen !== gen || !j.pv) return;
+    const line = uciToSanLine(fen, j.pv, 8);
+    if (!line.length) return;
+    const s = fmtScore(j.score, turn);
+    hintMove = j.pv[0];
+    $("hintMove").textContent = (final ? "Mejor jugada: " : "Pensando… ") + line[0].san;
+    $("hintEval").textContent = `Evaluación: ${s.txt} (${describe(s.cp)}) · profundidad ${j.depth}`;
+    $("hintPv").textContent = "Línea: " + formatLine(fen, line);
+    setEvalBar(s);
+    drawArrow();
+  };
+  coachTask = coach.search(fen, HINT_GO, j => paint(j, false));
+  coachTask.promise.then(j => {
+    if (!j || myGen !== gen) return;
+    if (!j.pv || j.pv[0] !== j.best) j.pv = [j.best];
+    paint(j, true);
+    $("btnPlayHint").style.display = "";
+  });
+}
+
+function playHint(){
+  if (!hintMove || !userCanMove()) return;
+  const u = hintMove;
+  tryMove(u.slice(0,2), u.slice(2,4));
+}
+
+function stopAll(){
+  gen++;
+  if (aiTask) aiTask.cancel();
+  if (coachTask) coachTask.cancel();
+  aiTask = coachTask = null; thinking = false;
+}
+
+function undo(){
+  if (!game.history().length) return;
+  const wasThinking = thinking;
+  stopAll();
+  game.undo();
+  if (!wasThinking && game.turn() !== userColor && game.history().length) game.undo();
+  // si quedó el turno de la IA (posición inicial siempre es del usuario), no hace falta nada más
+  clearSel(); hintMove = null; $("hint").classList.remove("show");
+  render(); updateEval();
+}
+
+function loadPosition(i){
+  stopAll();
+  idx = (i + BUILT.length) % BUILT.length;
+  const P = BUILT[idx];
+  try{ history.replaceState(null, "", "#" + (idx + 1)); }catch(e){}
+  if (P.error){ $("status").innerHTML = '<span class="err">Error al armar esta posición.</span>'; return; }
+  startFen = P.fen; game = new Chess(startFen); userColor = P.side;
+  prefixLast = P.last;
+  clearSel(); hintMove = null; $("hint").classList.remove("show");
+  if (ai) ai.send("ucinewgame");
+  buildBoard();
+  $("title").textContent = `${idx + 1}. ${P.name}`;
+  $("sideBadge").textContent = "Jugás con " + (userColor === "w" ? "blancas" : "negras");
+  $("sideBadge").className = "badge side " + userColor;
+  $("typeBadge").textContent = P.tipo;
+  $("startEval").textContent = "Eval inicial: …";
+  $("plan").textContent = P.plan;
+  $("origin").textContent = formatLine(new Chess().fen(), (() => { const g = new Chess(); return P.history.map(s => g.move(s)); })());
+  $("evalNum").textContent = "…"; $("evalFill").style.width = "50%";
+  document.querySelectorAll(".item").forEach((b, k) => b.classList.toggle("on", k === idx));
+  render(); updateEval(true);
+}
+
+function buildList(){
+  const list = $("list");
+  BUILT.forEach((P, i) => {
+    const b = document.createElement("button");
+    b.className = "item";
+    b.innerHTML = `<span class="n">${i + 1}</span><span class="t">${P.name}<span class="k"><span class="dot ${P.side}"></span>${P.side === "w" ? "Blancas" : "Negras"} · ${P.tipo}</span></span>`;
+    b.onclick = () => { loadPosition(i); window.scrollTo({top:0, behavior:"smooth"}); };
+    list.appendChild(b);
+  });
+}
+
+$("btnBest").onclick = showBest;
+$("btnPlayHint").onclick = playHint;
+$("btnReset").onclick = () => loadPosition(idx);
+$("btnUndo").onclick = undo;
+$("prev").onclick = () => loadPosition(idx - 1);
+$("next").onclick = () => loadPosition(idx + 1);
+$("toggleEval").onclick = () => {
+  showEval = !showEval;
+  $("evalRow").classList.toggle("hidden", !showEval);
+  $("startEval").style.display = showEval ? "" : "none";
+  $("toggleEval").textContent = showEval ? "Ocultar eval." : "Mostrar eval.";
+};
+
+buildList();
+const fromHash = parseInt(location.hash.slice(1), 10);
+loadPosition(fromHash >= 1 && fromHash <= BUILT.length ? fromHash - 1 : 0);
+</script>
+</body>
+</html>
