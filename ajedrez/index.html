@@ -2,12 +2,12 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ajedrez Medio Juego</title>
 <meta name="description" content="15 posiciones de medio juego para jugar con blancas o negras contra una IA de ~1800 Elo, con botón de mejor jugada y reinicio.">
 <style>
 :root{
-  --bg:#f3efe6; --panel:#fffdf8; --ink:#1e1c19; --muted:#6c655b; --line:#e3dccd;
+  --bg:#eceee9; --panel:#fafbf8; --ink:#1e1c19; --muted:#6c655b; --line:#e3dccd;
   --accent:#2f6f4e; --accent-ink:#fff; --accent-soft:#e3efe7;
   --sq-light:#efe6cf; --sq-dark:#8a6a4b; --sel:rgba(255,204,0,.55); --last:rgba(255,224,90,.45);
   --check:rgba(214,48,32,.65); --dot:rgba(20,20,20,.28); --arrow:#e26a12;
@@ -29,10 +29,10 @@
 *{box-sizing:border-box}
 html,body{margin:0}
 body{background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
-header{max-width:1080px;margin:0 auto;padding:18px 16px 6px}
+header{max-width:1080px;margin:0 auto;padding-block:18px 6px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 h1{font:700 1.45rem/1.2 Georgia,"Times New Roman",serif;margin:0}
 header p{margin:4px 0 0;color:var(--muted)}
-.wrap{max-width:1080px;margin:0 auto;padding:10px 16px 40px;display:grid;grid-template-columns:minmax(0,560px) minmax(0,1fr);gap:22px;align-items:start}
+.wrap{max-width:1080px;margin:0 auto;padding-block:10px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;grid-template-columns:minmax(0,560px) minmax(0,1fr);gap:22px;align-items:start}
 @media (max-width:860px){.wrap{grid-template-columns:minmax(0,1fr)}}
 
 /* Tablero */
